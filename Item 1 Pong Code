@@ -1,0 +1,1200 @@
+#pragma region Includes
+
+#include <iostream>
+#include <vector>
+#include <algorithm>
+#include <string>
+
+
+#include <GL/glew.h>
+#include <SDL.h>
+
+#define GLM_FORCE_RADIANS //force glm to use radians //must do **before** including GLM headers
+//NOTE: GLSL uses radians, so will do the same, for consistency
+
+#include <glm.hpp> //include the main glm header
+#include <gtc/matrix_transform.hpp> //include functions to ease the calculation of the view and projection matrices
+#include <gtc/type_ptr.hpp> //include functionality for converting a matrix object into a float array for usage in OpenGL
+#include <gtx/matrix_decompose.hpp>
+
+#pragma endregion
+
+using namespace std;
+
+#pragma region Global Variables
+std::string exeName;
+SDL_Window *win; //pointer to the SDL_Window
+SDL_GLContext context; //the SDL_GLContext
+int frameCount = 0;
+std::string frameLine = "";
+#pragma endregion
+
+#pragma region Vertex Shader
+
+//string holding the **source** of our vertex shader, to save loading from a file
+const std::string strVertexShader = R"(
+	#version 330
+	in vec4 position;
+
+							uniform mat4 modelMatrix;
+	uniform mat4 viewMatrix;
+	uniform mat4 projectionMatrix;
+
+			void main()
+	{
+	   gl_Position = projectionMatrix * viewMatrix * modelMatrix * position;
+	}
+)";
+// end::vertexShader[]
+
+#pragma endregion 
+
+#pragma region Fragment Shader
+
+// tag::fragmentShader[]
+//string holding the **source** of our fragment shader, to save loading from a file
+const std::string strFragmentShader = R"(
+	#version 330
+	out vec4 outputColor;
+  uniform vec3 color;
+	void main()
+	{
+	   outputColor = vec4(color, 1.0f);
+	}
+)";
+
+#pragma endregion 
+
+#pragma region Paddle Variables
+bool done = false; //end game
+
+bool paddle1Up = false; //paddle movement in keypresses
+bool paddle1Down = false;
+bool paddle2Up = false;
+bool paddle2Down = false;
+
+float cameraZoom = 0.0f;
+GLfloat color[] = { 0.0f, 0.0f, 1.0f }; //Colours for models
+GLfloat color2[] = { 1.0f, 0.0f, 0.0f };
+GLfloat color3[] = { 1.0f, 1.0f, 0.0f };
+GLfloat color4[] = { 1.0f, 0.0f, 0.0f };
+GLfloat color5[] = { 0.0f, 0.0f, 1.0f };
+GLfloat color6[] = { 1.0f, 1.0f, 1.0f };
+GLfloat color7[] = { 0.0f, 1.0f, 0.0f };
+#pragma endregion
+
+const GLfloat vertexData[] = {
+	//Geometry in verticies all different objects
+#pragma region Paddle1
+	//left
+	0.0075f, -0.08f, -0.08f, 1.0f,
+	0.0075f, -0.08f, 0.08f, 1.0f,
+	0.0075f,  0.08f, 0.08f, 1.0f,
+	//left
+	0.0075f, -0.08f, -0.08f, 1.0f,
+	0.0075f,  0.08f, 0.08f, 1.0f,
+	0.0075f,  0.08f, -0.08f, 1.0f,
+
+	//bottom
+	-0.0075f,  0.08f,  -0.08f, 1.0f,
+	0.0075f, -0.08f,  -0.08f, 1.0f,
+	0.0075f,  0.08f,  -0.08f, 1.0f,
+	//bottom
+	-0.0075f,  0.08f,  -0.08f, 1.0f,
+	-0.0075f, -0.08f,  -0.08f, 1.0f,
+	0.0075f, -0.08f,  -0.08f, 1.0f,
+
+	//back
+	-0.0075f, -0.08f,  0.08f, 1.0f,
+	0.0075f, -0.08f,  -0.08f, 1.0f,
+	-0.0075f, -0.08f,  -0.08f, 1.0f,
+	//back
+	-0.0075f, -0.08f,  0.08f, 1.0f,
+	0.0075f, -0.08f,  0.08f, 1.0f,
+	0.0075f, -0.08f,  -0.08f, 1.0f,
+
+	//top
+	0.0075f,  0.08f,  0.08f, 1.0f,
+	0.0075f, -0.08f,  0.08f, 1.0f,
+	-0.0075f, -0.08f,  0.08f, 1.0f,
+	//top
+	-0.0075f,  0.08f,  0.08f, 1.0f,
+	0.0075f,  0.08f,  0.08f, 1.0f,
+	-0.0075f, -0.08f,  0.08f, 1.0f,
+
+	//top
+	-0.0075f,  0.08f,  0.08f, 1.0f,
+	-0.0075f, -0.08f,  -0.08f, 1.0f,
+	-0.0075f,  0.08f,  -0.08f, 1.0f,
+	//top
+	-0.0075f, -0.08f,  -0.08f, 1.0f,
+	-0.0075f,  0.08f,  0.08f, 1.0f,
+	-0.0075f, -0.08f,  0.08f, 1.0f,
+
+	//front
+	-0.0075f,  0.08f,  0.08f, 1.0f,
+	-0.0075f,  0.08f,  -0.08, 1.0f,
+	0.0075f,  0.08f,  -0.08f, 1.0f,
+	//front
+	-0.0075f,  0.08f,  0.08f, 1.0f,
+	0.0075f,  0.08f,  -0.08f, 1.0f,
+	0.0075f,  0.08f,  0.08f, 1.0f,
+#pragma endregion
+
+#pragma region Paddle2
+
+	0.0075f, -0.08f, -0.08f, 1.0f,
+	0.0075f, -0.08f, 0.08f, 1.0f,
+	0.0075f,  0.08f, 0.08f, 1.0f,
+
+	0.0075f, -0.08f, -0.08f, 1.0f,
+	0.0075f,  0.08f, 0.08f, 1.0f,
+	0.0075f,  0.08f, -0.08f, 1.0f,
+
+	-0.0075f,  0.08f,  -0.08f, 1.0f,
+	0.0075f, -0.08f,  -0.08f, 1.0f,
+	0.0075f,  0.08f,  -0.08f, 1.0f,
+
+	-0.0075f,  0.08f,  -0.08f, 1.0f,
+	-0.0075f, -0.08f,  -0.08f, 1.0f,
+	0.0075f, -0.08f,  -0.08f, 1.0f,
+
+	-0.0075f, -0.08f,  0.08f, 1.0f,
+	0.0075f, -0.08f,  -0.08f, 1.0f,
+	-0.0075f, -0.08f,  -0.08f, 1.0f,
+
+	-0.0075f, -0.08f,  0.08f, 1.0f,
+	0.0075f, -0.08f,  0.08f, 1.0f,
+	0.0075f, -0.08f,  -0.08f, 1.0f,
+
+	0.0075f,  0.08f,  0.08f, 1.0f,
+	0.0075f, -0.08f,  0.08f, 1.0f,
+	-0.0075f, -0.08f,  0.08f, 1.0f,
+
+	-0.0075f,  0.08f,  0.08f, 1.0f,
+	0.0075f,  0.08f,  0.08f, 1.0f,
+	-0.0075f, -0.08f,  0.08f, 1.0f,
+
+	-0.0075f,  0.08f,  0.08f, 1.0f,
+	-0.0075f, -0.08f,  -0.08f, 1.0f,
+	-0.0075f,  0.08f,  -0.08f, 1.0f,
+
+	-0.0075f, -0.08f,  -0.08f, 1.0f,
+	-0.0075f,  0.08f,  0.08f, 1.0f,
+	-0.0075f, -0.08f,  0.08f, 1.0f,
+
+	-0.0075f,  0.08f,  0.08f, 1.0f,
+	-0.0075f,  0.08f,  -0.08, 1.0f,
+	0.0075f,  0.08f,  -0.08f, 1.0f,
+
+	-0.0075f,  0.08f,  0.08f, 1.0f,
+	0.0075f,  0.08f,  -0.08f, 1.0f,
+	0.0075f,  0.08f,  0.08f, 1.0f,
+
+#pragma endregion
+
+#pragma region Ball
+
+	- 0.025f, -0.025f, -0.025f, 1.0f,
+	-0.025f, -0.025f, 0.025f, 1.0f,
+	-0.025f, 0.025f, 0.025f, 1.0f,
+
+	-0.025f, -0.025f, -0.025f, 1.0f,
+	-0.025f, 0.025f, 0.025f, 1.0f,
+	-0.025f, 0.025f, -0.025f, 1.0f,
+
+	0.025f, 0.025f, -0.025f, 1.0f,
+	-0.025f, -0.025f, -0.025f, 1.0f,
+	-0.025f, 0.025f, -0.025f, 1.0f,
+
+	0.025f, 0.025f, -0.025f, 1.0f,
+	0.025f, -0.025f, -0.025f, 1.0f,
+	-0.025f, -0.025f, -0.025f, 1.0f,
+
+	0.025f, -0.025f, 0.025f, 1.0f,
+	-0.025f, -0.025f, -0.025f, 1.0f,
+	0.025f, -0.025f, -0.025f, 1.0f,
+
+	0.025f, -0.025f, 0.025f, 1.0f,
+	-0.025f, -0.025f, 0.025f, 1.0f,
+	-0.025f, -0.025f, -0.025f, 1.0f,
+
+	-0.025f, 0.025f, 0.025f, 1.0f,
+	-0.025f, -0.025f, 0.025f, 1.0f,
+	0.025f, -0.025f, 0.025, 1.0f,
+
+	0.025f, 0.025f, 0.025f, 1.0f,
+	-0.025f, 0.025f, 0.025f, 1.0f,
+	0.025f, -0.025f, 0.025f, 1.0f,
+
+	0.025f, 0.025f, 0.025f, 1.0f,
+	0.025f, -0.025f, -0.025f, 1.0f,
+	0.025f, 0.025f, -0.025f, 1.0f,
+
+	0.025f, -0.025f, -0.025f, 1.0f,
+	0.025f, 0.025f, 0.025f, 1.0f,
+	0.025f, -0.025f, 0.025f, 1.0f,
+
+	0.025f, 0.025f, 0.025f, 1.0f,
+	0.025f, 0.025f, -0.025f, 1.0f,
+	-0.025f, 0.025f, -0.025f, 1.0f,
+
+	0.025f, 0.025f, 0.025f, 1.0f,
+	-0.025f, 0.025f, -0.025f, 1.0f,
+	-0.025f, 0.025f, 0.025f, 1.0f,
+#pragma endregion 
+
+#pragma region Left goal
+	0.025f, -0.98f, -0.025f, 1.0f,
+	0.025f, -0.98f, 0.025f, 1.0f,
+	0.025f, 0.98f, 0.025f, 1.0f,
+
+	0.025f, -0.98f, -0.025f, 1.0f,
+	0.025f, 0.98f, 0.025f, 1.0f,
+	0.025f, 0.98f, -0.025f, 1.0f,
+#pragma endregion
+
+#pragma region Right goal
+	-0.025f, -0.98f, -0.025f, 1.0f,
+	-0.025f, -0.98f, 0.025f, 1.0f,
+	-0.025f, 0.98f, 0.025f, 1.0f,
+
+	-0.025f, -0.98f, -0.025f, 1.0f,
+	-0.025f, 0.98f, 0.025f, 1.0f,
+	-0.025f, 0.98f, -0.025f, 1.0f,
+#pragma endregion
+
+#pragma region Bottom Wall
+	-0.98f, 0.025f, -0.025f, 1.0f,
+	-0.98f, 0.025f, 0.025f, 1.0f,
+	0.98f, 0.025f, 0.025f, 1.0f,
+
+	-0.98f, 0.025f, -0.025f, 1.0f,
+	0.98f, 0.025f, 0.025f, 1.0f,
+	0.98f, 0.025f, -0.025f, 1.0f,
+#pragma endregion
+
+#pragma region Top Wall
+	- 0.98f, -0.025f, -0.025f, 1.0f,
+	-0.98f, -0.025f, 0.025f, 1.0f,
+	0.98f, -0.025f, 0.025f, 1.0f,
+
+	-0.98f, -0.025f, -0.025f, 1.0f,
+	0.98f, -0.025f, 0.025f, 1.0f,
+	0.98f, -0.025f, -0.025f, 1.0f,
+#pragma endregion
+
+#pragma region Scoring
+		
+	-0.025f, 0.025f, -0.025f, 1.0f,
+	-0.025f, 0.025f, 0.025f, 1.0f,
+	0.025f, 0.025f, 0.025f, 1.0f,
+
+	-0.025f, 0.025f, -0.025f, 1.0f,
+	0.025f, 0.025f, 0.025f, 1.0f,
+	0.025f, 0.025f, -0.025f, 1.0f,
+
+#pragma endregion
+
+};
+
+#pragma region Scoring
+
+int player1Score = 0; //score indication
+int player2Score = 0;
+
+#pragma endregion
+
+#pragma region Translations
+
+//Paddle 1
+glm::mat4 modelMatrixP1; //model matrix for the 1st paddle
+glm::mat4 rotationMatrixP1; //rotational matrix for the 1st paddle
+float rotateSpeedP1 = 0.6f; //the speed of the rotation
+glm::vec3 translateSpeedP1 = glm::vec3(0.0f, 0.0f, 0.0f); //the speed at which the paddle starts at
+glm::vec3 paddle1Pos = glm::vec3(0.80f, 0.0f, 0.0f); //the position the paddle will be translated too
+
+//Paddle 2
+glm::mat4 modelMatrixP2;
+glm::mat4 rotationMatrixP2;
+float rotateSpeedP2 = 0.6f;
+glm::vec3 translateSpeedP2 = glm::vec3(0.0f, 0.0f, 0.0f);
+glm::vec3 paddle2Pos = glm::vec3(-0.80f, 0.0f, 0.0f);
+
+//Ball
+glm::mat4 modelMatrixBall;
+glm::mat4 rotationMatrixBall;
+float rotateSpeedBall = 30.0f;
+glm::vec3 ballReset = glm::vec3(0.0f, 0.0f, 0.0f); //the position the ball will be moved too when it has hit the goal
+glm::vec3 translateSpeedBall = glm::vec3(-3.25f, 3.81f, 0.0f);
+glm::vec3 ballPosition = glm::vec3(0.0f, 0.0f, 0.0f);
+
+//walls
+glm::mat4 modelMatrixLeftWall;
+glm::mat4 rotationMatrixWall;
+glm::vec3 LWPosition = glm::vec3(0.945f, 0.0f, 0.0f);
+glm::mat4 modelMatrixRightWall;
+glm::vec3 RWPosition = glm::vec3(-0.945f, 0.0f, 0.0f);
+glm::mat4 modelMatrixBottomWall;
+glm::vec3 BWPosition = glm::vec3(0.0f, 0.945f, 0.0f);
+glm::mat4 modelMatrixTopWall;
+glm::vec3 TWPosition = glm::vec3(0.0f, -0.945f, 0.0f);
+glm::vec3 translateSpeedWall = glm::vec3(0.0f, 0.0f, 0.0f);;
+
+//score
+glm::mat4 modelMatrixScorep11;
+glm::mat4 modelMatrixScorep12;
+glm::mat4 modelMatrixScorep13;
+glm::mat4 modelMatrixScorep14;
+glm::mat4 modelMatrixScorep21;
+glm::mat4 modelMatrixScorep22;
+glm::mat4 modelMatrixScorep23;
+glm::mat4 modelMatrixScorep24;
+glm::mat4 modelMatrixScorep1Win;
+glm::mat4 modelMatrixScorep2Win;
+glm::mat4 rotationMatrixScore;
+glm::mat4 rotationMatrixWin;
+float scoreRotateSpeed = 5.0f;
+glm::vec3 p1Score1 = glm::vec3(0.20f, 0.80f, 0.0f);
+glm::vec3 p1Score2 = glm::vec3(0.30f, 0.80f, 0.0f);
+glm::vec3 p1Score3 = glm::vec3(0.40f, 0.80f, 0.0f);
+glm::vec3 p1Score4 = glm::vec3(0.50f, 0.80f, 0.0f);
+glm::vec3 p1ScoreWin = glm::vec3(0.60f, 0.80f, 0.0f);
+glm::vec3 p2Score1 = glm::vec3(-0.20f, 0.80f, 0.0f);
+glm::vec3 p2Score2 = glm::vec3(-0.30f, 0.80f, 0.0f);
+glm::vec3 p2Score3 = glm::vec3(-0.40f, 0.80f, 0.0f);
+glm::vec3 p2Score4 = glm::vec3(-0.50f, 0.80f, 0.0f);
+glm::vec3 p2ScoreWin = glm::vec3(-0.60f, 0.80f, 0.0f);
+glm::vec3 translateSpeedScore = glm::vec3(0.0f, 0.0f, 0.0f);;
+
+
+#pragma endregion 
+
+#pragma region Variables
+
+glm::vec3 cameraPos; //position of the camera
+glm::vec3 cameraFront;// Camera loom at
+glm::vec3 cameraUp;// up vector of the camera
+GLfloat cameraSpeed = 0.05f; //speed the moving camera is set to move at
+GLfloat cameraSpeedx = -0.05f;//the opposite direction
+int viewPos;//variable for switching camera on keypresses
+bool viewLock1 = true;//variable for camera keypresses
+bool viewLock2 = false;
+
+glm::mat4 viewMatrix;
+glm::mat4 projectionMatrix;
+
+GLuint theProgram; //GLuint that we'll fill in to refer to the GLSL program (only have 1 at this point)
+GLint positionLocation; //GLuint that we'll fill in with the location of the `position` attribute in the GLSL
+GLint colorLocation; //GLuint that we'll fill in with the location of the `color` variable in the GLSL
+GLint projectionMatrixLocation;
+GLint modelMatrixLocation;
+GLint viewMatrixLocation;
+GLuint vertexDataBufferObject;
+GLuint vertexArrayObject;
+
+#pragma endregion
+
+void initialise()
+{
+	if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
+		cout << "SDL_Init Error: " << SDL_GetError() << std::endl;
+		exit(1);
+	}
+
+	cameraPos = glm::vec3(0.0f, 0.0f, 1.0f); //initializing the camera variables for the look at
+	cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+	cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+
+	cout << "SDL initialised OK!\n";
+}
+
+void createWindow()
+{
+	//get executable name, and use as window title
+	int beginIdxWindows = exeName.rfind("\\"); //find last occurrence of a backslash
+	int beginIdxLinux = exeName.rfind("/"); //find last occurrence of a forward slash
+	int beginIdx = max(beginIdxWindows, beginIdxLinux);
+	std::string exeNameEnd = exeName.substr(beginIdx + 1);
+	const char *exeNameCStr = exeNameEnd.c_str();
+
+	//create window
+	win = SDL_CreateWindow(exeNameCStr, 100, 100, 600, 600, SDL_WINDOW_OPENGL); //same height and width makes the window square ...
+
+	//error handling
+	if (win == nullptr)
+	{
+		std::cout << "SDL_CreateWindow Error: " << SDL_GetError() << std::endl;
+		SDL_Quit();
+		exit(1);
+	}
+	cout << "SDL CreatedWindow OK!\n";
+}
+
+void setGLAttributes()
+{
+	int major = 3;
+	int minor = 3;
+	cout << "Built for OpenGL Version " << major << "." << minor << endl; //ahttps://en.wikipedia.org/wiki/OpenGL_Shading_Language#Versions
+																		  // set the opengl context version
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, major);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, minor);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE); //core profile
+	cout << "Set OpenGL context to versicreate remote branchon " << major << "." << minor << " OK!\n";
+}
+
+void createContext()
+{
+	setGLAttributes();
+
+	context = SDL_GL_CreateContext(win);
+	if (context == nullptr) {
+		SDL_DestroyWindow(win);
+		std::cout << "SDL_GL_CreateContext Error: " << SDL_GetError() << std::endl;
+		SDL_Quit();
+		exit(1);
+	}
+	cout << "Created OpenGL context OK!\n";
+}
+
+void initGlew()
+{
+	GLenum rev;
+	glewExperimental = GL_TRUE; //GLEW isn't perfect - see https://www.opengl.org/wiki/OpenGL_Loading_Library#GLEW
+	rev = glewInit();
+	if (GLEW_OK != rev) {
+		std::cout << "GLEW Error: " << glewGetErrorString(rev) << std::endl;
+		SDL_Quit();
+		exit(1);
+	}
+	else {
+		cout << "GLEW Init OK!\n";
+	}
+}
+
+GLuint createShader(GLenum eShaderType, const std::string &strShaderFile)
+{
+	GLuint shader = glCreateShader(eShaderType);
+	//error check
+	const char *strFileData = strShaderFile.c_str();
+	glShaderSource(shader, 1, &strFileData, NULL);
+
+	glCompileShader(shader);
+
+	GLint status;
+	glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+	if (status == GL_FALSE)
+	{
+		GLint infoLogLength;
+		glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &infoLogLength);
+
+		GLchar *strInfoLog = new GLchar[infoLogLength + 1];
+		glGetShaderInfoLog(shader, infoLogLength, NULL, strInfoLog);
+
+		const char *strShaderType = NULL;
+		switch (eShaderType)
+		{
+		case GL_VERTEX_SHADER: strShaderType = "vertex"; break;
+		case GL_GEOMETRY_SHADER: strShaderType = "geometry"; break;
+		case GL_FRAGMENT_SHADER: strShaderType = "fragment"; break;
+		}
+
+		fprintf(stderr, "Compile failure in %s shader:\n%s\n", strShaderType, strInfoLog);
+		delete[] strInfoLog;
+	}
+
+
+	return shader;
+}
+
+GLuint createProgram(const std::vector<GLuint> &shaderList)
+{
+	GLuint program = glCreateProgram();
+
+	for (size_t iLoop = 0; iLoop < shaderList.size(); iLoop++)
+		glAttachShader(program, shaderList[iLoop]);
+
+	glLinkProgram(program);
+
+	GLint status;
+	glGetProgramiv(program, GL_LINK_STATUS, &status);
+	if (status == GL_FALSE)
+	{
+		GLint infoLogLength;
+		glGetProgramiv(program, GL_INFO_LOG_LENGTH, &infoLogLength);
+
+		GLchar *strInfoLog = new GLchar[infoLogLength + 1];
+		glGetProgramInfoLog(program, infoLogLength, NULL, strInfoLog);
+		fprintf(stderr, "Linker failure: %s\n", strInfoLog);
+		delete[] strInfoLog;
+	}
+
+	for (size_t iLoop = 0; iLoop < shaderList.size(); iLoop++)
+		glDetachShader(program, shaderList[iLoop]);
+
+	return program;
+}
+
+void initializeProgram()
+{
+	std::vector<GLuint> shaderList;
+
+	shaderList.push_back(createShader(GL_VERTEX_SHADER, strVertexShader));
+	shaderList.push_back(createShader(GL_FRAGMENT_SHADER, strFragmentShader));
+
+	theProgram = createProgram(shaderList);
+	if (theProgram == 0)
+	{
+		cout << "GLSL program creation error." << std::endl;
+		SDL_Quit();
+		exit(1);
+	}
+	else {
+		cout << "GLSL program creation OK! GLUint is: " << theProgram << std::endl;
+	}
+
+	positionLocation = glGetAttribLocation(theProgram, "position");
+	colorLocation = glGetUniformLocation(theProgram, "color");
+	modelMatrixLocation = glGetUniformLocation(theProgram, "modelMatrix");
+	viewMatrixLocation = glGetUniformLocation(theProgram, "viewMatrix");
+	projectionMatrixLocation = glGetUniformLocation(theProgram, "projectionMatrix");
+
+
+	//clean up shaders (we don't need them anymore as they are no in theProgram
+	for_each(shaderList.begin(), shaderList.end(), glDeleteShader);
+}
+
+void initializeVertexArrayObject() //setup a GL object (a VertexArrayObject) that stores how to access data and from where
+{
+	glGenVertexArrays(1, &vertexArrayObject); //create a Vertex Array Object
+	cout << "Vertex Array Object created OK! GLUint is: " << vertexArrayObject << std::endl;
+
+	glBindVertexArray(vertexArrayObject); //make the just created vertexArrayObject the active one
+
+	glBindBuffer(GL_ARRAY_BUFFER, vertexDataBufferObject); //bind vertexDataBufferObject
+
+	glEnableVertexAttribArray(positionLocation); //enable attribute at index positionLocation
+
+	glVertexAttribPointer(positionLocation, 4, GL_FLOAT, GL_FALSE, 0, 0); //specify that position data contains four floats per vertex, and goes into attribute index positionLocation
+
+	glBindVertexArray(0); //unbind the vertexArrayObject so we can't change it
+
+						  //cleanup
+	glDisableVertexAttribArray(positionLocation); //disable vertex attribute at index positionLocation
+	glBindBuffer(GL_ARRAY_BUFFER, 0); //unbind array buffer
+
+}
+
+void initializeVertexBuffer()
+{
+	glGenBuffers(1, &vertexDataBufferObject);
+
+	glBindBuffer(GL_ARRAY_BUFFER, vertexDataBufferObject);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertexData), vertexData, GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	cout << "vertexDataBufferObject created OK! GLUint is: " << vertexDataBufferObject << std::endl;
+
+	initializeVertexArrayObject();
+}
+
+void loadAssets()
+{
+	initializeProgram(); //create GLSL Shaders, link into a GLSL program, and get IDs of attributes and variables
+
+	initializeVertexBuffer(); //load data into a vertex buffer
+
+	cout << "Loaded Assets OK!\n";
+}
+
+void handleInput()
+{
+
+#pragma region Keypresses
+	
+	SDL_Event event; //somewhere to store an event
+	while (SDL_PollEvent(&event)) //loop until SDL_PollEvent returns 0 (meaning no more events)
+	{
+		switch (event.type)
+		{
+		case SDL_QUIT:
+			done = true; //set donecreate remote branch flag if SDL wants to quit (i.e. if the OS has triggered a close event,
+						 //  - such as window close, or SIGINT
+			break;
+
+			//keydown handling - we should to the opposite on key-up for direction controls (generally)
+		case SDL_KEYDOWN:
+			//Keydown can fire repeatable if key-repeat is on.
+			//  - the repeat flag is set on the keyboard event, if this is a repeat event
+			//  - in our case, we're going to ignore repeat events
+			//  - https://wiki.libsdl.org/SDL_KeyboardEvent
+			//if (!event.key.repeat)
+			switch (event.key.keysym.sym)
+			{
+				//hit escape to exit
+			case SDLK_ESCAPE: done = true;
+				break;
+
+			case SDLK_UP:	paddle2Up = true;	break; //paddle movement 
+			case SDLK_DOWN:	paddle2Down = true; break;
+			case SDLK_w:	paddle1Up = true;	break;
+			case SDLK_s:	paddle1Down = true; break;
+
+				if (viewLock1 = true) //if the view is locked on viewlock1 camera can move dynamically (problems when setting camera to be specific values)
+				{
+			 		case SDLK_t: cameraPos += cameraSpeed * cameraFront; break; //moves the camera view up down left and right
+					case SDLK_g: cameraPos -= cameraSpeed * cameraFront; break;
+					case SDLK_h: cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed; break;
+					case SDLK_f: cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed; break;
+				}
+				else
+				{
+					break;
+				}
+			case SDLK_1: viewPos = 0; viewLock1 = true; break; //setting the camera view positions on the keypress
+			case SDLK_2: viewPos = 1; viewLock2 = true; break;
+			case SDLK_3: viewPos = 2; viewLock1 = true; break;
+			case SDLK_4: viewPos = 3; viewLock1 = true; break;
+			case SDLK_5: viewPos = 4; viewLock2 = true; break;
+			}
+			break;
+
+		case SDL_KEYUP:
+
+			switch (event.key.keysym.sym)
+			{
+			case SDLK_UP:	paddle2Up = false; break; //paddle movements when key is up
+			case SDLK_DOWN:	paddle2Down = false; break;
+			case SDLK_w:	paddle1Up = false; break;
+			case SDLK_s:	paddle1Down = false; break;
+			}
+			break;
+
+		}
+	}
+
+#pragma endregion
+
+#pragma region PaddleHandling
+	//Paddle1
+	if (paddle1Up) //this handles the bools for the key presses and paddle movement
+	{
+		translateSpeedP1 = glm::vec3(0.0, -8.0, 0.0);
+	}
+	if (paddle1Down)
+	{
+		translateSpeedP1 = glm::vec3(0.0, 8.0, 0.0);
+	}
+	if (!paddle1Up && !paddle1Down)
+	{
+		translateSpeedP1 = glm::vec3(0.0, 0.0, 0.0);
+	}
+	if (paddle1Up && paddle1Down)
+	{
+		translateSpeedP1 = glm::vec3(0.0, 0.0, 0.0);
+	}
+
+	//Paddle2
+	if (paddle2Up)
+	{
+		translateSpeedP2 = glm::vec3(0.0, -8.0, 0.0);
+	}
+	if (paddle2Down)
+	{
+		translateSpeedP2 = glm::vec3(0.0, 8.0, 0.0);
+	}
+	if (!paddle2Up && !paddle2Down)
+	{
+		translateSpeedP2 = glm::vec3(0.0, 0.0, 0.0);
+	}
+	if (paddle2Up && paddle2Down)
+	{
+		translateSpeedP2 = glm::vec3(0.0, 0.0, 0.0);
+	}
+
+#pragma endregion
+
+#pragma region CollisionDetection
+	if (paddle1Pos.y < -0.8) //detecting paddles colliding with the location that is the level bound wall
+	{
+		translateSpeedP1 = glm::vec3(0.0, 2.0, 0.0);
+	}
+	if (paddle1Pos.y > 0.8)
+	{
+		translateSpeedP1 = glm::vec3(0.0, -2.0, 0.0);
+	}
+
+	if (paddle2Pos.y < -0.8)
+	{
+		translateSpeedP2 = glm::vec3(0.0, 2.0, 0.0);
+	}
+	if (paddle2Pos.y > 0.8)
+	{
+		translateSpeedP2 = glm::vec3(0.0, -2.0, 0.0);
+	}
+
+#pragma endregion
+
+}
+
+bool paddleCollision(glm::vec3 paddlePosition, glm::vec3 posBall)
+{
+
+	//const float paddleWidth = 0.015f, paddleHeight = 0.16f; // full values of the object
+	float paddleL = paddlePosition.x - 0.0075f; //calculating the left, right top and bottom of the object to work out collisions 
+	float paddleR = paddlePosition.x + 0.0075f;
+	float paddleB = paddlePosition.y - 0.08f;
+	float paddleT = paddlePosition.y + 0.08f;
+
+
+	const float ballWidth = 0.05f, ballHeight = 0.05f;
+	float ballL = posBall.x - 0.025f;
+	float ballR = posBall.x + 0.025f;
+	float ballB = posBall.y - 0.025f;
+	float ballT = posBall.y + 0.025f;
+
+	bool collidingX = false; //bools for collision checks
+	bool collidingY = false;
+
+	if (paddleR > ballL && paddleL < ballR)//detecting the collisions with intesecting points on the x axis
+	{
+		//cout << "x" << endl; //testing
+		collidingX = true; //sets the collision bool to true - there is collision
+	}
+
+	if (paddleB < ballT && paddleT > ballB)
+	{
+		//cout << "y" << endl;
+		collidingY = true;
+	}
+	return collidingX && collidingY;
+};
+
+void updateSimulation(double simLength = 0.002) //update simulation with an amount of time to simulate for (in seconds)
+{
+
+#pragma region ViewVariables
+	//WARNING - we should calculate an appropriate amount of time to simulate - not always use a constant amount of time
+	// see, for example, http://headerphile.blogspot.co.uk/2014/07/part-9-no-more-delays.html
+
+	const glm::vec3 unitX = glm::vec3(1, 0, 0);
+	const glm::vec3 unitY = glm::vec3(0, 1, 0);
+	const glm::vec3 unitZ = glm::vec3(0, 0, 1);
+	const glm::vec3 unit45 = glm::normalize(glm::vec3(1, 0, 0)); //used in rotation for angle
+	const glm::vec3 unit45Ball = glm::normalize(glm::vec3(1, 0, 1));
+	const glm::vec3 unit45Score = glm::normalize(glm::vec3(0, 1, 0));
+
+#pragma endregion
+
+#pragma region Paddle 1
+
+	float rotateP1 = (float)simLength * rotateSpeedP1;
+	rotationMatrixP1 = glm::rotate(rotationMatrixP1, rotateP1, unit45);
+	glm::mat4 translationMatrixP1;
+	glm::vec3 translateVectorP1 = (float)simLength * translateSpeedP1;
+	paddle1Pos = paddle1Pos + translateVectorP1;
+	translationMatrixP1 = glm::translate(glm::mat4(1.0f), paddle1Pos);
+	modelMatrixP1 = translationMatrixP1 * rotationMatrixP1;
+	//cout << "P1 Position" <<  paddle1Pos.y << endl; //testing
+
+#pragma endregion 
+
+#pragma region Paddle 2
+
+	float rotateP2 = (float)simLength * rotateSpeedP2;
+	rotationMatrixP2 = glm::rotate(rotationMatrixP2, rotateP2, unit45);
+	glm::mat4 translationMatrixP2;
+	glm::vec3 translateVectorP2 = (float)simLength * translateSpeedP2;
+	translationMatrixP2 = glm::translate(glm::mat4(1.0f), paddle2Pos);
+	paddle2Pos = paddle2Pos + translateVectorP2;
+	modelMatrixP2 = translationMatrixP2 * rotationMatrixP2;
+
+#pragma endregion 
+
+#pragma region Ball
+
+	float rotateBall = (float)simLength * rotateSpeedBall; //rotating the ball with speed and time to do it at
+	rotationMatrixBall = glm::rotate(rotationMatrixBall, rotateBall, unit45Ball); // matrix containing speed time and angle to rotate
+	glm::mat4 translationMatrixBall; //create the translation matrix to move with
+	glm::vec3 translateVectorBall = (float)simLength * translateSpeedBall; //similar to rotation but for moving
+	ballPosition = ballPosition + translateVectorBall; //the position of the ball is its original set pos and the vector to move on
+	translationMatrixBall = glm::translate(glm::mat4 (1.0f), ballPosition); //translating the ball
+	modelMatrixBall = translationMatrixBall * rotationMatrixBall; //model matrix is translation and rotation matrix
+	//cout << "Ball Position" << ballPosition.x << ballPosition.y << ballPosition.z << endl; //testing
+	
+	//ball and world bound collisions
+	if (ballPosition.y < -0.89)
+	{
+		translateSpeedBall.y = 1.0f * abs(translateSpeedBall.y);
+	}
+
+	if (ballPosition.y > 0.89)
+	{
+		translateSpeedBall.y = -1.0f * abs(translateSpeedBall.y);
+	}
+
+	if (ballPosition.x < -0.89) // right wall
+	{
+		ballPosition = glm::vec3(0.0f, 0.0f, 0.0f);
+		player1Score++;
+		cout << "player1 score" << player1Score << endl;
+	}
+
+	if (ballPosition.x > 0.89)
+	{
+		ballPosition = glm::vec3(0.0f, 0.0f, 0.0f);
+		player2Score++;
+		cout << "player2 score" << player2Score << endl;//console score
+	}
+
+	if (player1Score > 4) //end game
+	{
+		done = true;
+	}
+
+	if (player2Score > 4)
+	{
+		done = true;
+	}
+
+#pragma endregion 
+
+#pragma region Walls
+
+	//walls
+	glm::mat4 translationMatrixLW;
+	glm::vec3 translateVectorWall = (float)simLength * translateSpeedWall;
+	translationMatrixLW = glm::translate(glm::mat4(1.0f), LWPosition);
+	LWPosition = LWPosition + translateVectorWall;
+	modelMatrixLeftWall = translationMatrixLW * rotationMatrixWall;
+
+	glm::mat4 translationMatrixRW;
+	translationMatrixRW = glm::translate(glm::mat4(1.0f), RWPosition);
+	RWPosition = RWPosition + translateVectorWall;
+	modelMatrixRightWall = translationMatrixRW * rotationMatrixWall;
+
+	glm::mat4 translationMatrixTW;
+	translationMatrixTW = glm::translate(glm::mat4(1.0f), TWPosition);
+	TWPosition = TWPosition + translateVectorWall;
+	modelMatrixTopWall = translationMatrixTW * rotationMatrixWall;
+
+	glm::mat4 translationMatrixBW;
+	translationMatrixBW = glm::translate(glm::mat4(1.0f), BWPosition);
+	BWPosition = BWPosition + translateVectorWall;
+	modelMatrixBottomWall = translationMatrixBW * rotationMatrixWall;
+
+#pragma endregion
+
+#pragma region Scoring
+
+	glm::mat4 translationMatrixPS1; //the placement and creation but not drawing of the individual score indicator tokens
+	glm::vec3 translateVectorScore = (float)simLength * translateSpeedScore;
+	translationMatrixPS1 = glm::translate(glm::mat4(1.0f), p1Score1);
+	p1Score1 = p1Score1 + translateVectorScore;
+	modelMatrixScorep11 = translationMatrixPS1 * rotationMatrixScore;
+
+	glm::mat4 translationMatrixPS2;
+	translationMatrixPS2 = glm::translate(glm::mat4(1.0f), p1Score2);
+	p1Score2 = p1Score2 + translateVectorScore;
+	modelMatrixScorep12 = translationMatrixPS2 * rotationMatrixScore;
+
+	glm::mat4 translationMatrixPS3;
+	translationMatrixPS3 = glm::translate(glm::mat4(1.0f), p1Score3);
+	p1Score3 = p1Score3 + translateVectorScore;
+	modelMatrixScorep13 = translationMatrixPS3 * rotationMatrixScore;
+
+	glm::mat4 translationMatrixPS4;
+	translationMatrixPS4 = glm::translate(glm::mat4(1.0f), p1Score4);
+	p1Score4 = p1Score4 + translateVectorScore;
+	modelMatrixScorep14 = translationMatrixPS4 * rotationMatrixScore;
+
+	glm::mat4 translationMatrixPSWin;
+	float rotateScore1 = (float)simLength * rotateSpeedBall;
+	rotationMatrixWin = glm::rotate(rotationMatrixWin, rotateScore1, unit45Score);
+	translationMatrixPSWin = glm::translate(glm::mat4(1.0f), p1ScoreWin);
+	p1ScoreWin = p1ScoreWin + translateVectorScore;
+	modelMatrixScorep1Win = translationMatrixPSWin * rotationMatrixWin;
+
+	glm::mat4 translationMatrixPS21;
+	translationMatrixPS21 = glm::translate(glm::mat4(1.0f), p2Score1);
+	p2Score1 = p2Score1 + translateVectorScore;
+	modelMatrixScorep21 = translationMatrixPS21 * rotationMatrixScore;
+
+	glm::mat4 translationMatrixPS22;
+	translationMatrixPS22 = glm::translate(glm::mat4(1.0f), p2Score2);
+	p2Score2 = p2Score2 + translateVectorScore;
+	modelMatrixScorep22 = translationMatrixPS22 * rotationMatrixScore;
+
+	glm::mat4 translationMatrixPS23;
+	translationMatrixPS23 = glm::translate(glm::mat4(1.0f), p2Score3);
+	p2Score3 = p2Score3 + translateVectorScore;
+	modelMatrixScorep23 = translationMatrixPS23 * rotationMatrixScore;
+
+	glm::mat4 translationMatrixPS24;
+	translationMatrixPS24 = glm::translate(glm::mat4(1.0f), p2Score4);
+	p2Score4 = p2Score4 + translateVectorScore;
+	modelMatrixScorep24 = translationMatrixPS24 * rotationMatrixScore;
+
+	glm::mat4 translationMatrixPSWin2;
+	translationMatrixPSWin2 = glm::translate(glm::mat4(1.0f), p2ScoreWin);
+	p2ScoreWin = p2ScoreWin + translateVectorScore;
+	modelMatrixScorep2Win = translationMatrixPSWin2 * rotationMatrixWin;
+#pragma endregion
+
+#pragma region Collisions
+	if (paddleCollision(paddle1Pos, ballPosition)) //calling collision function, applying it to paddle 1 and ball
+	{
+//		cout << "paddle1 collision" << endl; //testing
+		translateSpeedBall.x = -1.0f * abs(translateSpeedBall.x);
+	}
+
+	else if (paddleCollision(paddle2Pos, ballPosition))
+	{
+//		cout << "paddle2 collision" << endl; //testing
+		translateSpeedBall.x = 1.0f * abs(translateSpeedBall.x);
+	}
+
+//	else cout << "."; //testing
+
+
+#pragma endregion
+
+#pragma region View
+
+	float fovyRadians = glm::degrees(40.0f);
+	float aspectRatio = 1.0f;
+	float nearClipPlane = 0.1f;
+	float farClipPlane = 100.0f;
+
+	projectionMatrix = glm::perspective(fovyRadians, aspectRatio, nearClipPlane, farClipPlane);
+	// Position of the camera		// Camera loom at			// up vector of the camera
+	viewMatrix = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+
+	if (viewPos == 0) //change camera view on keypress
+	{
+		viewLock2 = false;
+		cameraPos = glm::vec3(0.0f, 0.0f, 1.0f);
+		cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+		cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+		viewMatrix = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+		projectionMatrix = glm::perspective(fovyRadians, aspectRatio, nearClipPlane, farClipPlane);
+	}
+
+	if (viewPos == 1)
+	{
+		viewLock1 = false;
+		glm::vec3 newBallPos = glm::vec3(ballPosition.x, ballPosition.y, 0.75);
+		glm::vec3 newBallPos2 = glm::vec3(ballPosition.x, ballPosition.y, ballPosition.z);
+		viewMatrix = glm::lookAt(newBallPos, newBallPos2, cameraUp);
+		projectionMatrix = glm::perspective(fovyRadians, aspectRatio, nearClipPlane, farClipPlane);
+	}
+
+	if (viewPos == 2)  
+	{
+		viewLock2 = false;
+		cameraPos = glm::vec3(0.0f, 0.0f, 5.25f);
+		cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+		cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+		viewMatrix = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+		projectionMatrix = glm::perspective(fovyRadians, aspectRatio, nearClipPlane, farClipPlane);
+	}
+
+	if (viewPos == 3)
+	{
+		viewLock2 = true;
+		viewLock1 = true;
+	}
+
+	if (viewPos == 4)
+	{
+		viewLock2 = false;
+		viewLock1 = false;
+		projectionMatrix = glm::ortho(1, -1, 1, -1, -1, 1);
+	}
+
+#pragma endregion
+
+}
+
+void preRender()
+{
+	glViewport(0, 0, 600, 600); //set viewpoint
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f); //set clear colour
+	glClear(GL_COLOR_BUFFER_BIT); //clear the window (technical the scissor box bounds)
+}
+
+void render()
+{
+
+#pragma region Paddles
+
+	glUseProgram(theProgram); //installs the program object specified by program as part of current rendering state
+
+	//Paddle1
+	glUniformMatrix4fv(modelMatrixLocation, 1, GL_FALSE, glm::value_ptr(modelMatrixP1));
+	glUniformMatrix4fv(viewMatrixLocation, 1, GL_FALSE, glm::value_ptr(viewMatrix));
+	glUniformMatrix4fv(projectionMatrixLocation, 1, GL_FALSE, glm::value_ptr(projectionMatrix));
+
+	//load data to GLSL that **may** have changed
+	glUniform3f(colorLocation, color[0], color[1], color[2]);
+
+	glBindVertexArray(vertexArrayObject);
+
+	glDrawArrays(GL_TRIANGLES, 0, 36); //Draw something, using Triangles
+
+	//Paddle2
+	glUniformMatrix4fv(modelMatrixLocation, 1, GL_FALSE, glm::value_ptr(modelMatrixP2));
+	glUniform3f(colorLocation, color2[0], color2[1], color2[2]);
+	glDrawArrays(GL_TRIANGLES, 36, 36);
+
+#pragma endregion
+
+#pragma region score
+	glUniformMatrix4fv(modelMatrixLocation, 1, GL_FALSE, glm::value_ptr(modelMatrixScorep1Win));
+	glUniform3f(colorLocation, color7[0], color7[1], color7[2]);
+	glDrawArrays(GL_TRIANGLES, 132, 6);
+
+	glUniformMatrix4fv(modelMatrixLocation, 1, GL_FALSE, glm::value_ptr(modelMatrixScorep2Win));
+	glUniform3f(colorLocation, color7[0], color7[1], color7[2]);
+	glDrawArrays(GL_TRIANGLES, 132, 6);
+
+	if (player1Score > 0)
+	{
+		glUniformMatrix4fv(modelMatrixLocation, 1, GL_FALSE, glm::value_ptr(modelMatrixScorep11));
+		glUniform3f(colorLocation, color[0], color[1], color[2]);
+		glDrawArrays(GL_TRIANGLES, 132, 6);
+	}
+	if (player1Score > 1)
+	{
+		glUniformMatrix4fv(modelMatrixLocation, 1, GL_FALSE, glm::value_ptr(modelMatrixScorep12));
+		glUniform3f(colorLocation, color[0], color[1], color[2]);
+		glDrawArrays(GL_TRIANGLES, 132, 6);
+	}
+	if (player1Score > 2)
+	{
+		glUniformMatrix4fv(modelMatrixLocation, 1, GL_FALSE, glm::value_ptr(modelMatrixScorep13));
+		glUniform3f(colorLocation, color[0], color[1], color[2]);
+		glDrawArrays(GL_TRIANGLES, 132, 6);
+	}
+	if (player1Score > 3)
+	{
+		glUniformMatrix4fv(modelMatrixLocation, 1, GL_FALSE, glm::value_ptr(modelMatrixScorep14));
+		glUniform3f(colorLocation, color[0], color[1], color[2]);
+		glDrawArrays(GL_TRIANGLES, 132, 6);
+	}
+
+	if (player2Score > 0)
+	{
+		glUniformMatrix4fv(modelMatrixLocation, 1, GL_FALSE, glm::value_ptr(modelMatrixScorep21));
+		glUniform3f(colorLocation, color2[0], color2[1], color2[2]);
+		glDrawArrays(GL_TRIANGLES, 132, 6);
+	}
+	if (player2Score > 1)
+	{
+		glUniformMatrix4fv(modelMatrixLocation, 1, GL_FALSE, glm::value_ptr(modelMatrixScorep22));
+		glUniform3f(colorLocation, color2[0], color2[1], color2[2]);
+		glDrawArrays(GL_TRIANGLES, 132, 6);
+	}
+	if (player2Score > 2)
+	{
+		glUniformMatrix4fv(modelMatrixLocation, 1, GL_FALSE, glm::value_ptr(modelMatrixScorep23));
+		glUniform3f(colorLocation, color2[0], color2[1], color2[2]);
+		glDrawArrays(GL_TRIANGLES, 132, 6);
+	}
+	if (player2Score > 3)
+	{
+		glUniformMatrix4fv(modelMatrixLocation, 1, GL_FALSE, glm::value_ptr(modelMatrixScorep24));
+		glUniform3f(colorLocation, color2[0], color2[1], color2[2]);
+		glDrawArrays(GL_TRIANGLES, 132, 6);
+	}
+#pragma endregion
+
+#pragma region Ball
+
+	//Ball
+	glUniformMatrix4fv(modelMatrixLocation, 1, GL_FALSE, glm::value_ptr(modelMatrixBall));
+	glUniform3f(colorLocation, color3[0], color3[1], color3[2]);
+	glDrawArrays(GL_TRIANGLES, 72, 36);
+
+#pragma endregion
+
+#pragma region Walls
+
+	//Left goal
+	glUniformMatrix4fv(modelMatrixLocation, 1, GL_FALSE, glm::value_ptr(modelMatrixLeftWall));
+	glUniform3f(colorLocation, color4[0], color4[1], color4[2]);
+	glDrawArrays(GL_TRIANGLES, 108, 6);
+
+	//Right goal
+	glUniformMatrix4fv(modelMatrixLocation, 1, GL_FALSE, glm::value_ptr(modelMatrixRightWall));
+	glUniform3f(colorLocation, color5[0], color5[1], color5[2]);
+	glDrawArrays(GL_TRIANGLES, 114, 6);
+
+	//bottom wall
+	glUniformMatrix4fv(modelMatrixLocation, 1, GL_FALSE, glm::value_ptr(modelMatrixBottomWall));
+	glUniform3f(colorLocation, color6[0], color6[1], color6[2]);
+	glDrawArrays(GL_TRIANGLES, 120, 6);
+
+	//top wall
+	glUniformMatrix4fv(modelMatrixLocation, 1, GL_FALSE, glm::value_ptr(modelMatrixTopWall));
+	glUniform3f(colorLocation, color6[0], color6[1], color6[2]);
+	glDrawArrays(GL_TRIANGLES, 126, 6);
+
+#pragma endregion
+
+#pragma region CleanUp
+
+	glBindVertexArray(0);
+
+	glUseProgram(0); //clean up
+
+#pragma endregion
+
+}
+
+void postRender()
+{
+	SDL_GL_SwapWindow(win);; //present the frame buffer to the display (swapBuffers)
+	frameLine += "Frame: " + std::to_string(frameCount++);
+	//cout << "\r" << frameLine << std::flush;
+	frameLine = "";
+}
+
+void cleanUp()
+{
+	SDL_GL_DeleteContext(context);
+	SDL_DestroyWindow(win);
+	cout << "Cleaning up OK!\n";
+}
+
+int main(int argc, char* args[])
+{
+	exeName = args[0];
+	//setup
+	//- do just once
+	initialise();
+	createWindow();
+	createContext();
+	initGlew();
+	glViewport(0, 0, 600, 600); //should check what the actual window res is?
+	SDL_GL_SwapWindow(win); //force a swap, to make the trace clearer
+
+							//do stuff that only needs to happen once
+							//- create shaders
+							//- load vertex data
+	loadAssets();
+
+	while (!done) //loop until done flag is set)
+	{
+		handleInput(); // this should ONLY SET VARIABLES
+		updateSimulation(); // this should ONLY SET VARIABLES according to simulation
+		preRender();
+		render(); // this should render the world state according to VARIABLES - 
+		postRender();
+	}
+
+	//cleanup and exit
+	cleanUp();
+	SDL_Quit();
+
+	return 0;
+}
